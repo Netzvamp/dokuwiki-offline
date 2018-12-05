@@ -1,11 +1,10 @@
 # Dokuwiki offline
 
-A tool to download and store all pages and media files from Dokuwikis through the xmlrpl api.
-Thanks to the excellent dokuwiki package (https://pypi.org/project/dokuwiki/)!
+A tool to download and store all pages and media files from Dokuwiki through the XML-RPC API, possible thanks to the excellent python dokuwiki package (https://pypi.org/project/dokuwiki/)!
 
 ## Preparation
     
-    # Prepare a venv in the current directory and install the requirements
+    # Prepare a venv in the current directory and install the requirements with
     pip install -r requirements.txt
 
 ## Usage
@@ -22,6 +21,7 @@ Thanks to the excellent dokuwiki package (https://pypi.org/project/dokuwiki/)!
     Example:
     
     python dokuwiki_offline.py --url https://mywiki.example --username Testuser --password mypassword123 --skipcert
+
 Tested with Python 3.7.
 
 ## Build a binary package/ Executable with PyInstaller
