@@ -48,7 +48,8 @@ def validate_url(ctx, param, url: str):
 @click.option('--username', prompt=True, help="Login username")
 @click.option('--password', prompt=True, help="Login password")
 @click.option('--skipcert', is_flag=True, default=False, help="Skip https certificate checks")
-def dump(url: str, username: str, password: str, skipcert: bool) -> None:
+@click.option('--force', is_flag=True, default=False, help="Skip local versioncheck and force download")
+def dump(url: str, username: str, password: str, skipcert: bool, force: bool) -> None:
     """
     A tool to download and store all pages and media files from Dokuwikis through the xmlrpl api.
 
@@ -77,7 +78,10 @@ def dump(url: str, username: str, password: str, skipcert: bool) -> None:
 
     # Load JSON file with file versions
     try:
-        versions = json.load(open(os.path.join(dump_folder, "versions.json")))
+        if not force:
+            versions = json.load(open(os.path.join(dump_folder, "versions.json")))
+        else:
+            versions = {"pages": {}, "medias": {}}
     except FileNotFoundError:
         versions = {"pages": {}, "medias": {}}
 
@@ -90,8 +94,8 @@ def dump(url: str, username: str, password: str, skipcert: bool) -> None:
             filename = "{}/{}.html".format(dump_folder, str(page['id']).replace(":", "/"))
             os.makedirs(os.path.dirname(filename), exist_ok=True)
 
+            # build a dot path by traversing down to root (../../../../)
             root_path = ""
-            # traverse down to root
             for fdown in range(0, filename.count("/") - 1):
                 root_path = "../{}".format(root_path)
 
@@ -104,10 +108,15 @@ def dump(url: str, username: str, password: str, skipcert: bool) -> None:
                 for url_match in re.finditer(r"<a[\s]+(?:[^>]*?\s+)?href=([\"'])(/.*?)\1", html, re.MULTILINE):
                     new_url = urlparse(url_match.group(2)[1:].replace(":", "/")).path + ".html"
 
-                    if "_media" in new_url:  # fix media download urls
-                        new_url = new_url.replace("_media/", "")
-                        new_url = new_url.replace(".html", "")
-                    new_url = root_path + new_url  # fix absolute paths with relative urls
+                    # filter unusable paths
+                    ignore_paths = ["_export/"]  # to be extended
+                    if any(ignore_path in new_url[:len(ignore_path)] for ignore_path in ignore_paths):
+                        new_url = url + url_match.group(2)  # Keep link to online page ... better than nothing
+                    else:
+                        if "_media" in new_url:  # fix media download urls
+                            new_url = new_url.replace("_media/", "")
+                            new_url = new_url.replace(".html", "")
+                        new_url = root_path + new_url  # fix absolute paths with relative urls
                     html = html.replace(url_match.group(2), new_url)
 
                 # fix img paths
@@ -126,6 +135,7 @@ def dump(url: str, username: str, password: str, skipcert: bool) -> None:
                 html = html.replace("{{download_date}}", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                 html = html.replace("{{last_modified}}", str(date(pages.info(page['id'])['lastModified'])))
 
+                file.write('\ufeff')  # Write unicode BOM for Firefox
                 file.write(html)
 
                 versions['pages'][page['id']] = page_version
@@ -141,8 +151,6 @@ def dump(url: str, username: str, password: str, skipcert: bool) -> None:
 
             logger.info("Updating media {}".format(media['id']))
 
-            # print(wiki.medias.info(media['id']))
-
             filename = "{}/{}".format(dump_folder, str(media['id']).replace(":", "/"))
             os.makedirs(os.path.dirname(filename), exist_ok=True)
 
@@ -154,15 +162,23 @@ def dump(url: str, username: str, password: str, skipcert: bool) -> None:
         else:
             logger.info("No update needed for media {}".format(media['id']))
 
-    # Download stylesheet
+    # Download stylesheet and jquery and javascript
     try:
         if skipcert:
-            data = request.urlopen("{}/lib/exe/css.php".format(url), context=_create_unverified_context()).read()
+            css_data = request.urlopen("{}/lib/exe/css.php".format(url), context=_create_unverified_context()).read()
+            jquery_data = request.urlopen("{}/lib/exe/jquery.php".format(url), context=_create_unverified_context()).read()
+            js_data = request.urlopen("{}/lib/exe/js.php".format(url), context=_create_unverified_context()).read()
         else:
-            data = request.urlopen("{}/lib/exe/css.php".format(url)).read()
+            css_data = request.urlopen("{}/lib/exe/css.php".format(url)).read()
+            jquery_data = request.urlopen("{}/lib/exe/jquery.php".format(url)).read()
+            js_data = request.urlopen("{}/lib/exe/js.php".format(url)).read()
 
         with open("{}/style.css".format(dump_folder), "wb") as stylesheet:
-            stylesheet.write(data)
+            stylesheet.write(css_data)
+        with open("{}/jquery.js".format(dump_folder), "wb") as stylesheet:
+            stylesheet.write(jquery_data)
+        with open("{}/javascript.js".format(dump_folder), "wb") as stylesheet:
+            stylesheet.write(js_data)
     except Exception as err:
         logger.error("Stylesheet download error: {}".format(err))
 
