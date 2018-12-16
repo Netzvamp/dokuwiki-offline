@@ -1,0 +1,51 @@
+version: 1.0
+
+environment:
+  matrix:
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
+      PYTHON: C:\Python37
+      ARTIFACTPATH: dist\dokuwiki_offline
+      ARTIFACTEXTENSION: win32
+      ARTIFACTTYPE: zip
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
+      PYTHON: C:\Python37-x64
+      ARTIFACTPATH: dist\dokuwiki_offline
+      ARTIFACTEXTENSION: win64
+      ARTIFACTTYPE: zip
+    - APPVEYOR_BUILD_WORKER_IMAGE: Ubuntu
+      ARTIFACTPATH: dist/*.tar.gz
+      ARTIFACTEXTENSION: x64-linux.tar.gz
+      ARTIFACTTYPE: file
+install:
+  - cmd: |
+      SET PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%
+      python --version
+      python -c "import struct; print(struct.calcsize('P') * 8)"
+      python -m virtualenv venv
+      venv\Scripts\activate
+      python -c "import sys; print(sys.executable)"
+      pip install -r requirements.txt
+      pip install pyinstaller
+  - sh: |
+      sudo apt-get update
+      sudo apt-get -y install python3-pip
+      pip3 install -r requirements.txt
+      pip3 install pyinstaller
+build_script:
+  - cmd: pyinstaller dokuwiki_offline.spec
+  - sh: |
+      pyinstaller dokuwiki_offline.spec
+      cd dist
+      tar -zcvf "dokuwiki-offline-$APPVEYOR_BUILD_VERSION-$ARTIFACTEXTENSION" dokuwiki_offline
+test: off
+artifacts:
+  - path: '$(ARTIFACTPATH)'
+    type: $(ARTIFACTTYPE)
+    name: 'dokuwiki-offline-$(APPVEYOR_BUILD_VERSION)-$(ARTIFACTEXTENSION)'
+deploy:
+- provider: GitHub
+  tag: $(APPVEYOR_BUILD_VERSION)
+  release: dokuwiki-offline $(APPVEYOR_BUILD_VERSION)
+  auth_token:
+    secure: rt3kKuljzuHCfCrNhAcJCaz4VVUYa4+zrrRkbkANVAnVFBW3Py0rxghXJFjoKPuH
+  draft: true
